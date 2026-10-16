@@ -6,7 +6,6 @@ struct Node {
         struct Node *next;
 };
 
-int delete_num(struct Node **head, int v);
 void printf_all(struct Node *head);
 void free_all(struct Node *head);
 void reverse(struct Node **head);
@@ -56,7 +55,7 @@ void reverse(struct Node **head)
 	struct Node *next = *head;
 	struct Node *before = NULL;
 
-	while(next != NULL /*&& 末尾不是0*/)
+	while(next != NULL)
 	{
 		before = current;			/*把上个current存入before*/
 		current = next;				/*把上个current移动到上个的后一个*/
@@ -66,29 +65,15 @@ void reverse(struct Node **head)
 	*head = current;				/*头指向最后的当下（改指针）*/
 }
 
-int delete_num(struct Node **head, int v)
-{
-        struct Node **linkp = head;                    /* 指着"装着当前节点地址的地方" */
-
-        while (*linkp != NULL && (*linkp)->Val != v)
-                linkp = &(*linkp)->next;               /* 走一格：改指"下一个地址字段" */
-
-        if (*linkp == NULL) return 0;                  /* 走到底，没找到 */
-
-        struct Node *old = *linkp;                     /* 存下被删节点的地址 */
-        *linkp = old->next;                            /* 绕过：改"装着它地址的地方" */
-        free(old);                                     /* 放掉它 */
-        return 1;
-}
-
 void printf_all(struct Node *head)
 {
         struct Node *p = head;
         while(p != NULL)
         {
-                printf("%d\n", p->Val);
+                printf("%d\t", p->Val);
                 p = p->next;
         }
+	printf("\n");
 }
 
 void free_all(struct Node *head)
