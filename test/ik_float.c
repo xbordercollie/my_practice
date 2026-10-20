@@ -5,21 +5,64 @@
 #include <stdbool.h>
 
 struct LegCfg { double coxa; double femur; double tibia; };
+
 struct IkSolution { double coxa_deg; double femur_deg; double tibia_deg; };
+
+struct ServoMap {
+    double coxa_mount_deg;
+    double femur_zero_deg;
+    double tibia_zero_deg;
+    bool coxa_invert;
+    bool femur_invert;
+    bool tibia_invert;
+    double coxa_horn_deg;
+    double femur_horn_deg;
+    double tibia_horn_deg;
+    double coxa_min_deg, coxa_max_deg;
+    double femur_min_deg, femur_max_deg;
+    double tibia_min_deg, tibia_max_deg;
+};
+
+struct ServoOut {
+    double coxa_deg, femur_deg, tibia_deg;
+    bool warning;
+};
+
+bool ik_to_servo(const struct IkSolution *geo,
+                 const struct ServoMap *map,
+                 struct ServoOut *out);
+
 bool ik_leg_float(double x, double y, double z,
                   const struct LegCfg *cfg,
                   struct IkSolution *sol);
+
 static void run_case(double x, double y, double z, const struct LegCfg *cfg)
 {
-	struct IkSolution sol = {0};
-	bool ok = ik_leg_float(x, y, z, cfg, &sol);
+        struct IkSolution sol = {0};
+        bool ok = ik_leg_float(x, y, z, cfg, &sol);
 
-	printf("x=%.0f y=%.0f z=%.0f -> ", x, y, z);
-	if (ok)
-    		printf("ok  coxa=%.2f  femur=%.2f  tibia=%.2f\n",
+        printf("x=%.0f y=%.0f z=%.0f -> ", x, y, z);
+        if (ok)
+                printf("ok  coxa=%.2f  femur=%.2f  tibia=%.2f\n",
                sol.coxa_deg, sol.femur_deg, sol.tibia_deg);
-    	else
-        	printf("false\n");
+        else
+                printf("false\n");
+}
+
+static void run_servo_case(double x, double y, double z,
+                           const struct LegCfg *cfg,
+                           const struct ServoMap *map)
+{
+    struct IkSolution geo = {0};
+    struct ServoOut out = {0};
+
+    if (!ik_leg_float(x, y, z, cfg, &geo)) {
+        printf("x=%.0f y=%.0f z=%.0f -> geo=false\n", x, y, z);
+        return;
+    }
+    ik_to_servo(&geo, map, &out);
+    printf("x=%.0f y=%.0f z=%.0f -> servo: %.2f %.2f %.2f warning=%d\n",
+           x, y, z, out.coxa_deg, out.femur_deg, out.tibia_deg, out.warning);
 }
 
 bool ik_leg_float( double x, double y, double z,
@@ -71,9 +114,59 @@ bool ik_leg_float( double x, double y, double z,
 	return true;
 }
 
+bool ik_to_servo(const struct IkSolution *geo,
+                 const struct ServoMap *map,
+                 struct ServoOut *out)
+{
+	/*判NULL*/
+	if(!geo || !map || !out) { out->warning = true; return false; }
+	/*获得解算后真实角度*/
+	double coxa = geo->coxa_deg - map->coxa_mount_deg;
+	double femur = geo->femur_deg - map->femur_zero_deg;
+	double tibia = map->tibia_zero_deg - geo->tibia_deg;
+
+	/*根据invert决定是否取反*/
+	if(map->coxa_invert) coxa = -coxa;
+	if(map->femur_invert) femur = -femur;
+	if(map->tibia_invert) tibia = -tibia;
+
+	/*加上微调值*/
+	coxa += map->coxa_horn_deg;
+	femur += map->femur_horn_deg;
+	tibia += map->tibia_horn_deg;
+
+	/*判断是否越界*/
+	if (coxa > map->coxa_max_deg) { coxa = map->coxa_max_deg; out->warning = true; }
+	else if (coxa < map->coxa_min_deg) { coxa = map->coxa_min_deg; out->warning = true; }
+	if (femur > map->femur_max_deg) { femur = map->femur_max_deg; out->warning = true; }
+	else if (femur < map->femur_min_deg) { femur = map->femur_min_deg; out->warning = true; }
+	if (tibia > map->tibia_max_deg) { tibia = map->tibia_max_deg; out->warning = true; }
+	else if (tibia < map->tibia_min_deg) { tibia = map->tibia_min_deg; out->warning = true; }
+
+	/*返回最终结果*/
+	out->coxa_deg = coxa;
+	out->femur_deg = femur;
+	out->tibia_deg = tibia;
+	return true;
+}
+
 int main(void)
 {
 	const struct LegCfg cfg = {45, 75, 120};
+	const struct ServoMap rm = {
+       	 .coxa_mount_deg = 90.0,
+       	 .femur_zero_deg = 45.0,
+       	 .tibia_zero_deg = 90.0,
+       	 .coxa_invert = false,
+       	 .femur_invert = true,
+    	 .tibia_invert = true,
+       	 .coxa_horn_deg = -1.0,
+       	 .femur_horn_deg = -2.0,
+       	 .tibia_horn_deg = 0.8,
+       	 .coxa_min_deg = -90.0,  .coxa_max_deg = 90.0,
+       	 .femur_min_deg = -60.0, .femur_max_deg = 90.0,
+       	 .tibia_min_deg = -68.7, .tibia_max_deg = 90.0
+   	 };
 
     	/* 期望 coxa=90.00  femur=44.82  tibia=76.18 */
     	run_case(0.0, 50.0, 160.0, &cfg);
@@ -86,6 +179,10 @@ int main(void)
 
     	/* 期望 false（三角形不成立） */
     	run_case(0.0, 50.0, 300.0, &cfg);
+
+	run_servo_case(0.0, 50.0, 160.0, &cfg, &rm);
+	run_servo_case(100.0, 80.0, 100.0, &cfg, &rm);
+	run_servo_case(0.0, 0.0, 100.0, &cfg, &rm);
 
     	return 0;
 }
