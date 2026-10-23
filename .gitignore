@@ -17,3 +17,6 @@ test/q3
 test/q4
 test/q5
 test/ik_float
+test/gait_lift
+test/gait_table
+test/gait_walk
