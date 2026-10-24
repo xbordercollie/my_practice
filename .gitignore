@@ -20,3 +20,5 @@ test/ik_float
 test/gait_lift
 test/gait_table
 test/gait_walk
+test/gait_stab
+test/ik_float_gait

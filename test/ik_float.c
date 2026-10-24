@@ -150,6 +150,9 @@ bool ik_to_servo(const struct IkSolution *geo,
 	return true;
 }
 
+void gait_function(const struct LegCfg *cfg, const struct ServoMap *rm);
+double edge_dist(double x1, double z1, double x2, double z2);
+/* 对一条腿进行ik解算与servo解算并打印 */
 int main(void)
 {
 	const struct LegCfg cfg = {45, 75, 120};
@@ -180,9 +183,47 @@ int main(void)
     	/* 期望 false（三角形不成立） */
     	run_case(0.0, 50.0, 300.0, &cfg);
 
+
+	/* 三例计算实际角度 */
 	run_servo_case(0.0, 50.0, 160.0, &cfg, &rm);
 	run_servo_case(100.0, 80.0, 100.0, &cfg, &rm);
 	run_servo_case(0.0, 0.0, 100.0, &cfg, &rm);
 
+	/* 用gait解算x, y, z坐标计算结果 */
+	gait_function(&cfg, &rm);
+
     	return 0;
+}
+
+void gait_function(const struct LegCfg *cfg, const struct ServoMap *rm)
+{
+    const double L = 40.0;      /* 步长 mm */
+    const double H = 20.0;      /* 抬腿高度 mm */
+    const int walk = 4;         /* 行走步数 */
+    const int step_s = 12;      /* 总步数 */
+
+    int step, s;
+
+    for(step=0; step<step_s; step++) {
+        double x, y;
+	double z = 160.0;
+        if(step<walk) {
+            x = L * (step - 2) / 4;
+	    y =50 - H * step * (4 - step) / 4;
+        }
+        else {
+            s = step - 4;
+            x = L * (4 - s) / 8;
+	    y = 50;
+        }
+    printf("step%2d:\t", step);
+    run_servo_case(x, y, z, cfg, rm);
+    }
+}
+
+double edge_dist(double x1, double z1, double x2, double z2)
+{
+    double cross = x1 * z2 - x2 * z1;
+    double len   = sqrt((x2-x1)*(x2-x1) + (z2-z1)*(z2-z1));
+    return fabs(cross) / len;
 }
